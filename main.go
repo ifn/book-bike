@@ -1,7 +1,14 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
+	"log"
+	"net/http"
+	"os"
+	"runtime"
+
+	"github.com/codegangsta/negroni"
+	"github.com/gorilla/mux"
 )
 
 func getAutoOffers(model string) <-chan string {
@@ -22,7 +29,23 @@ func getAvitoOffers(model string) <-chan string {
 	return links
 }
 
-func getOffers(model string) {
+type Error struct {
+	Err string `json:"error"`
+}
+
+type BikeOffersRequest struct {
+	Model string `json:"model"`
+}
+
+type BikeOffersResponse struct {
+	*BikeOffersRequest
+	Offers []string `json:"offers"`
+}
+
+func (self *BikeOffersResponse) SetOffers() {
+	model := self.Model
+	var offers []string
+
 	auto := getAutoOffers(model)
 	avito := getAvitoOffers(model)
 
@@ -33,17 +56,57 @@ func getOffers(model string) {
 				auto = nil
 				break
 			}
-			fmt.Println(link)
+			offers = append(offers, link)
 		case link, ok := <-avito:
 			if !ok {
 				avito = nil
 				break
 			}
-			fmt.Println(link)
+			offers = append(offers, link)
 		}
+	}
+
+	self.Offers = offers
+}
+
+func getBikeOffers(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	decoder := json.NewDecoder(r.Body)
+	encoder := json.NewEncoder(w)
+
+	resp := new(BikeOffersResponse)
+
+	err := decoder.Decode(resp)
+	if err != nil {
+		log.Println(err)
+		encoder.Encode(Error{err.Error()})
+		return
+	}
+
+	resp.SetOffers()
+
+	err = encoder.Encode(resp)
+	if err != nil {
+		log.Println(err)
+		encoder.Encode(Error{err.Error()})
 	}
 }
 
+func startBBSrv() {
+	r := mux.NewRouter()
+	r.HandleFunc("/getBikeOffers", getBikeOffers).Methods("POST")
+	http.Handle("/", r)
+
+	n := negroni.Classic()
+	n.UseHandler(r)
+	n.Run(":" + os.Getenv("PORT"))
+}
+
 func main() {
-	getOffers("VFR800")
+	startBBSrv()
+}
+
+func init() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
 }
