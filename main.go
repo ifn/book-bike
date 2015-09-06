@@ -29,23 +29,7 @@ func getAvitoOffers(model string) <-chan string {
 	return links
 }
 
-type Error struct {
-	Err string `json:"error"`
-}
-
-type BikeOffersRequest struct {
-	Model string `json:"model"`
-}
-
-type BikeOffersResponse struct {
-	*BikeOffersRequest
-	Offers []string `json:"offers"`
-}
-
-func (self *BikeOffersResponse) SetOffers() {
-	model := self.Model
-	var offers []string
-
+func getOffers(model string) (offers []string) {
 	auto := getAutoOffers(model)
 	avito := getAvitoOffers(model)
 
@@ -66,36 +50,74 @@ func (self *BikeOffersResponse) SetOffers() {
 		}
 	}
 
-	self.Offers = offers
+	return
 }
 
-func getBikeOffers(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+//
 
-	decoder := json.NewDecoder(r.Body)
-	encoder := json.NewEncoder(w)
+type state struct {
+	db string
+}
 
-	resp := new(BikeOffersResponse)
+//
 
-	err := decoder.Decode(resp)
-	if err != nil {
-		log.Println(err)
-		encoder.Encode(Error{err.Error()})
-		return
-	}
+type Error struct {
+	Err string `json:"error"`
+}
 
-	resp.SetOffers()
+type BikeOffersRequest struct {
+	Model string `json:"model"`
+}
 
-	err = encoder.Encode(resp)
-	if err != nil {
-		log.Println(err)
-		encoder.Encode(Error{err.Error()})
+type BikeOffersResponse struct {
+	st *state
+
+	*BikeOffersRequest
+	Offers []string `json:"offers"`
+}
+
+//
+
+func (self *BikeOffersResponse) getDbOffers(model string) (offers []string) {
+	log.Println(self.st.db)
+	return
+}
+
+func (self *BikeOffersResponse) SetOffers() {
+	self.Offers = self.getDbOffers(self.Model)
+}
+
+func getBikeOffers(st *state) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		decoder := json.NewDecoder(r.Body)
+		encoder := json.NewEncoder(w)
+
+		resp := &BikeOffersResponse{st: st}
+
+		err := decoder.Decode(resp)
+		if err != nil {
+			log.Println(err)
+			encoder.Encode(Error{err.Error()})
+			return
+		}
+
+		resp.SetOffers()
+
+		err = encoder.Encode(resp)
+		if err != nil {
+			log.Println(err)
+			encoder.Encode(Error{err.Error()})
+		}
 	}
 }
 
 func startBBSrv() {
+	st := &state{}
+
 	r := mux.NewRouter()
-	r.HandleFunc("/getBikeOffers", getBikeOffers).Methods("POST")
+	r.HandleFunc("/getBikeOffers", getBikeOffers(st)).Methods("POST")
 	http.Handle("/", r)
 
 	n := negroni.Classic()
