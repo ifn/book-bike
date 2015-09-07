@@ -7,6 +7,9 @@ import (
 	"os"
 	"runtime"
 
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/jinzhu/gorm"
+
 	"github.com/codegangsta/negroni"
 	"github.com/gorilla/mux"
 )
@@ -56,7 +59,7 @@ func getOffers(model string) (offers []string) {
 //
 
 type state struct {
-	db string
+	db gorm.DB
 }
 
 //
@@ -114,7 +117,15 @@ func getBikeOffers(st *state) http.HandlerFunc {
 }
 
 func startBBSrv() {
-	st := &state{}
+	db, err := gorm.Open("mysql", "bb:123456@tcp(dbserver:3306)/bikes?charset=utf8&parseTime=True&loc=Local")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	db.DB().SetMaxIdleConns(10)
+	db.DB().SetMaxOpenConns(100)
+
+	st := &state{db: db}
 
 	r := mux.NewRouter()
 	r.HandleFunc("/getBikeOffers", getBikeOffers(st)).Methods("POST")
