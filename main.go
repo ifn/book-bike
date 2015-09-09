@@ -7,8 +7,8 @@ import (
 	"os"
 	"runtime"
 
+	"database/sql"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/jinzhu/gorm"
 
 	"github.com/codegangsta/negroni"
 	"github.com/gorilla/mux"
@@ -59,7 +59,7 @@ func getOffers(model string) (offers []string) {
 //
 
 type state struct {
-	db gorm.DB
+	db *sql.DB
 }
 
 //
@@ -81,13 +81,36 @@ type BikeOffersResponse struct {
 
 //
 
-func (self *BikeOffersResponse) getDbOffers(model string) (offers []string) {
-	log.Println(self.st.db)
+func (self *BikeOffersResponse) getDbOffers(model string) (offers []string, err error) {
+	db := self.st.db
+
+	rows, err := db.Query("SELECT link FROM bikes WHERE model = ?", model)
+	if err != nil {
+		return
+	}
+	for rows.Next() {
+		var link string
+		if err = rows.Scan(&link); err != nil {
+			return
+		}
+		offers = append(offers, link)
+	}
+	if err = rows.Err(); err != nil {
+		return
+	}
 	return
 }
 
-func (self *BikeOffersResponse) SetOffers() {
-	self.Offers = self.getDbOffers(self.Model)
+func (self *BikeOffersResponse) SetOffers() error {
+	model := self.Model
+
+	offers, err := self.getDbOffers(model)
+	if err != nil {
+		return err
+	}
+
+	self.Offers = offers
+	return nil
 }
 
 func getBikeOffers(st *state) http.HandlerFunc {
@@ -106,24 +129,27 @@ func getBikeOffers(st *state) http.HandlerFunc {
 			return
 		}
 
-		resp.SetOffers()
+		err = resp.SetOffers()
+		if err != nil {
+			log.Println(err)
+			encoder.Encode(Error{err.Error()})
+			return
+		}
 
 		err = encoder.Encode(resp)
 		if err != nil {
 			log.Println(err)
 			encoder.Encode(Error{err.Error()})
+			return
 		}
 	}
 }
 
 func startBBSrv() {
-	db, err := gorm.Open("mysql", "bb:123456@tcp(dbserver:3306)/bikes?charset=utf8&parseTime=True&loc=Local")
+	db, err := sql.Open("mysql", "bb:123456@tcp(dbserver:3306)/bikes?charset=utf8&parseTime=True&loc=Local")
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	db.DB().SetMaxIdleConns(10)
-	db.DB().SetMaxOpenConns(100)
 
 	st := &state{db: db}
 
