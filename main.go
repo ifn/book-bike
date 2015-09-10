@@ -88,6 +88,7 @@ func (self *BikeOffersResponse) getDbOffers(model string) (offers []string, err 
 	if err != nil {
 		return
 	}
+	//TODO: add timeout here?
 	for rows.Next() {
 		var link string
 		if err = rows.Scan(&link); err != nil {
@@ -146,7 +147,7 @@ func getBikeOffers(st *state) http.HandlerFunc {
 }
 
 func startBBSrv() {
-	db, err := sql.Open("mysql", "bb:123456@tcp(dbserver:3306)/bikes?charset=utf8&parseTime=True&loc=Local")
+	db, err := sql.Open("mysql", "bb:123456@tcp(dbserver:3306)/bikes?charset=utf8&parseTime=True&loc=Local&timeout=10s")
 	if err != nil {
 		log.Fatal(err)
 	}
