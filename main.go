@@ -32,7 +32,28 @@ func getAvitoOffers(model string) <-chan string {
 	return links
 }
 
-func getOffers(model string) (offers []string) {
+func (self *BikeOffersResponse) getDbOffers(model string) (offers []string, err error) {
+	db := self.st.db
+
+	rows, err := db.Query("SELECT link FROM bikes WHERE model = ?", model)
+	if err != nil {
+		return
+	}
+	//TODO: add timeout here?
+	for rows.Next() {
+		var link string
+		if err = rows.Scan(&link); err != nil {
+			return
+		}
+		offers = append(offers, link)
+	}
+	if err = rows.Err(); err != nil {
+		return
+	}
+	return
+}
+
+func (self *BikeOffersResponse) getOffers(model string) (offers []string, err error) {
 	auto := getAutoOffers(model)
 	avito := getAvitoOffers(model)
 
@@ -81,31 +102,10 @@ type BikeOffersResponse struct {
 
 //
 
-func (self *BikeOffersResponse) getDbOffers(model string) (offers []string, err error) {
-	db := self.st.db
-
-	rows, err := db.Query("SELECT link FROM bikes WHERE model = ?", model)
-	if err != nil {
-		return
-	}
-	//TODO: add timeout here?
-	for rows.Next() {
-		var link string
-		if err = rows.Scan(&link); err != nil {
-			return
-		}
-		offers = append(offers, link)
-	}
-	if err = rows.Err(); err != nil {
-		return
-	}
-	return
-}
-
 func (self *BikeOffersResponse) SetOffers() error {
 	model := self.Model
 
-	offers, err := self.getDbOffers(model)
+	offers, err := self.getOffers(model)
 	if err != nil {
 		return err
 	}
@@ -147,12 +147,7 @@ func getBikeOffers(st *state) http.HandlerFunc {
 }
 
 func startBBSrv() {
-	db, err := sql.Open("mysql", "bb:123456@tcp(dbserver:3306)/bikes?charset=utf8&parseTime=True&loc=Local&timeout=10s")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	st := &state{db: db}
+	st := &state{}
 
 	r := mux.NewRouter()
 	r.HandleFunc("/getBikeOffers", getBikeOffers(st)).Methods("POST")
