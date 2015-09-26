@@ -8,8 +8,6 @@ import (
 
 const AllMatches = -1
 
-const AutoRuVendorsUrl = "http://moto.auto.ru/motorcycle/"
-
 func listAutoRuVendors() (vendors []string, err error) {
 	var vendorsRE = regexp.MustCompile(`motorcycle/used/(\w+)/`)
 

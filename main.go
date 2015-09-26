@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -14,17 +15,57 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func getAutoOffers(model string) <-chan string {
-	links := make(chan string)
+const AutoRuVendorsUrl = "http://moto.auto.ru/motorcycle/"
+
+func queryToAutoRuQuery(query string) string {
+	model := query
+
+	model_ids := map[string]string{
+		"VFR800": "7889",
+	}
+
+	model_param := "m[]=" + model_ids[model]
+
+	model_paths := map[string]string{
+		"VFR800": "used/honda/vfr/",
+	}
+
+	return AutoRuVendorsUrl + model_paths[model] + "?" + model_param
+}
+
+func getAutoRuOffers(query string) <-chan interface{} {
+	links := make(chan interface{})
+
 	go func() {
+		auto_ru_query := queryToAutoRuQuery(query)
+
+		resp, err := http.Get(auto_ru_query)
+		if err != nil {
+			links <- err
+			close(links)
+			return
+		}
+		defer resp.Body.Close()
+
+		respBody, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			links <- err
+			close(links)
+			return
+		}
+
+		//parse, fetch links
+		log.Println(string(respBody))
+
 		links <- "http://moto.auto.ru/motorcycle/used/sale/1826802-02dbed.html"
 		close(links)
 	}()
+
 	return links
 }
 
-func getAvitoOffers(model string) <-chan string {
-	links := make(chan string)
+func getAvitoOffers(query string) <-chan interface{} {
+	links := make(chan interface{})
 	go func() {
 		links <- "https://www.avito.ru/moskva/mototsikly_i_mototehnika/honda_cbr_1000_rr_fireblade_632522473"
 		close(links)
@@ -32,45 +73,26 @@ func getAvitoOffers(model string) <-chan string {
 	return links
 }
 
-func (self *BikeOffersResponse) getDbOffers(model string) (offers []string, err error) {
-	db := self.st.db
-
-	rows, err := db.Query("SELECT link FROM bikes WHERE model = ?", model)
-	if err != nil {
-		return
-	}
-	//TODO: add timeout here?
-	for rows.Next() {
-		var link string
-		if err = rows.Scan(&link); err != nil {
-			return
-		}
-		offers = append(offers, link)
-	}
-	if err = rows.Err(); err != nil {
-		return
-	}
-	return
-}
-
-func (self *BikeOffersResponse) getOffers(model string) (offers []string, err error) {
-	auto := getAutoOffers(model)
-	avito := getAvitoOffers(model)
+func (self *BikeOffersResponse) getOffers(query string) (offers []string, err error) {
+	auto := getAutoRuOffers(query)
+	var avito chan interface{}
 
 	for auto != nil || avito != nil {
 		select {
-		case link, ok := <-auto:
+		case msg, ok := <-auto:
 			if !ok {
 				auto = nil
 				break
 			}
-			offers = append(offers, link)
-		case link, ok := <-avito:
-			if !ok {
-				avito = nil
+
+			switch msg := msg.(type) {
+			case error:
+				err = msg
+				auto = nil
 				break
+			case string:
+				offers = append(offers, msg)
 			}
-			offers = append(offers, link)
 		}
 	}
 
