@@ -33,16 +33,22 @@ func queryToAutoRuQuery(query string) string {
 	return AutoRuVendorsUrl + model_paths[model] + "?" + model_param
 }
 
+func fetchAutoRuOffers(html string, out chan interface{}) error {
+	log.Println(html)
+	return nil
+}
+
 func getAutoRuOffers(query string) <-chan interface{} {
 	links := make(chan interface{})
 
 	go func() {
+		defer close(links)
+
 		auto_ru_query := queryToAutoRuQuery(query)
 
 		resp, err := http.Get(auto_ru_query)
 		if err != nil {
 			links <- err
-			close(links)
 			return
 		}
 		defer resp.Body.Close()
@@ -50,15 +56,14 @@ func getAutoRuOffers(query string) <-chan interface{} {
 		respBody, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			links <- err
-			close(links)
 			return
 		}
 
-		//parse, fetch links
-		log.Println(string(respBody))
-
-		links <- "http://moto.auto.ru/motorcycle/used/sale/1826802-02dbed.html"
-		close(links)
+		err = fetchAutoRuOffers(string(respBody), links)
+		if err != nil {
+			links <- err
+			return
+		}
 	}()
 
 	return links
@@ -84,7 +89,6 @@ func (self *BikeOffersResponse) getOffers(query string) (offers []string, err er
 				auto = nil
 				break
 			}
-
 			switch msg := msg.(type) {
 			case error:
 				err = msg
