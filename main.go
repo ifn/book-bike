@@ -10,6 +10,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"strings"
 
 	"github.com/codegangsta/negroni"
 	"github.com/gorilla/mux"
@@ -19,12 +20,20 @@ const AllMatches = -1
 
 const AutoRuVendorsUrl = "http://moto.auto.ru/motorcycle/"
 
+func queryToModel(query string) string {
+	normal_forms := map[string]string{
+		"VFR800": "VFR800", "ВЫФЕР": "VFR800",
+		"R6": "R6", "YZF-R6": "R6", "СТРЕКОЗА": "R6",
+	}
+	return normal_forms[strings.ToUpper(query)]
+}
+
 func queryToAutoRuQuery(query string) string {
-	model := query
+	model := queryToModel(query)
 
 	model_ids := map[string]string{
-		"VFR800": "7889", "выфер": "7889",
-		"R6": "9605", "YZF-R6": "9605", "стрекоза": "9605",
+		"VFR800": "7889",
+		"R6": "9605",
 	}
 
 	model_param := "m[]=" + model_ids[model]
