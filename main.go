@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"runtime"
 
 	"database/sql"
@@ -34,7 +35,13 @@ func queryToAutoRuQuery(query string) string {
 }
 
 func fetchAutoRuOffers(html string, out chan interface{}) error {
-	log.Println(html)
+	var offersRE = regexp.MustCompile(`(?U)href="(.+)".+class="offer-list"`)
+
+	matchedOffers := offersRE.FindAllStringSubmatch(html, AllMatches)
+	for _, matchedOffer := range matchedOffers {
+		out <- matchedOffer[1]
+	}
+
 	return nil
 }
 
