@@ -6,8 +6,6 @@ import (
 	"regexp"
 )
 
-const AllMatches = -1
-
 func listAutoRuVendors() (vendors []string, err error) {
 	var vendorsRE = regexp.MustCompile(`motorcycle/used/(\w+)/`)
 

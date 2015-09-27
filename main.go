@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -15,6 +17,8 @@ import (
 	"github.com/codegangsta/negroni"
 	"github.com/gorilla/mux"
 )
+
+const AllMatches = -1
 
 const AutoRuVendorsUrl = "http://moto.auto.ru/motorcycle/"
 
@@ -35,6 +39,7 @@ func queryToAutoRuQuery(query string) string {
 }
 
 func fetchAutoRuOffers(html string, out chan interface{}) error {
+	// TODO: check re
 	var offersRE = regexp.MustCompile(`(?U)href="(.+)".+class="offer-list"`)
 
 	matchedOffers := offersRE.FindAllStringSubmatch(html, AllMatches)
@@ -49,6 +54,7 @@ func getAutoRuOffers(query string) <-chan interface{} {
 	links := make(chan interface{})
 
 	go func() {
+		// TODO: check defer order
 		defer close(links)
 
 		auto_ru_query := queryToAutoRuQuery(query)
@@ -59,6 +65,11 @@ func getAutoRuOffers(query string) <-chan interface{} {
 			return
 		}
 		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			links <- errors.New(fmt.Sprintf("request: %s, status: %d", auto_ru_query, resp.StatusCode))
+			return
+		}
 
 		respBody, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
@@ -89,18 +100,19 @@ func (self *BikeOffersResponse) getOffers(query string) (offers []string, err er
 	auto := getAutoRuOffers(query)
 	var avito chan interface{}
 
+Loop:
 	for auto != nil || avito != nil {
 		select {
 		case msg, ok := <-auto:
 			if !ok {
 				auto = nil
-				break
+				continue Loop
 			}
 			switch msg := msg.(type) {
 			case error:
 				err = msg
 				auto = nil
-				break
+				continue Loop
 			case string:
 				offers = append(offers, msg)
 			}
