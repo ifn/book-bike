@@ -11,9 +11,6 @@ import (
 	"regexp"
 	"runtime"
 
-	"database/sql"
-	_ "github.com/go-sql-driver/mysql"
-
 	"github.com/codegangsta/negroni"
 	"github.com/gorilla/mux"
 )
@@ -126,9 +123,7 @@ Loop:
 
 //
 
-type state struct {
-	db *sql.DB
-}
+type state struct{}
 
 //
 
@@ -194,7 +189,7 @@ func getBikeOffers(st *state) http.HandlerFunc {
 }
 
 func startBBSrv() {
-	st := &state{}
+	st := new(state)
 
 	r := mux.NewRouter()
 	r.HandleFunc("/getBikeOffers", getBikeOffers(st)).Methods("POST")
