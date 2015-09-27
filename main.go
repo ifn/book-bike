@@ -26,13 +26,15 @@ func queryToAutoRuQuery(query string) string {
 	model := query
 
 	model_ids := map[string]string{
-		"VFR800": "7889",
+		"VFR800": "7889", "выфер": "7889",
+		"R6": "9605", "YZF-R6": "9605", "стрекоза": "9605",
 	}
 
 	model_param := "m[]=" + model_ids[model]
 
 	model_paths := map[string]string{
 		"VFR800": "used/honda/vfr/",
+		"R6":     "used/yamaha/yzf-r6/",
 	}
 
 	return AutoRuVendorsUrl + model_paths[model] + "?" + model_param
