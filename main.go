@@ -21,29 +21,32 @@ const AllMatches = -1
 const AutoRuVendorsUrl = "http://moto.auto.ru/motorcycle/"
 
 func queryToModel(query string) string {
-	normal_forms := map[string]string{
-		"VFR800": "VFR800", "ВЫФЕР": "VFR800",
-		"R6": "R6", "YZF-R6": "R6", "СТРЕКОЗА": "R6",
+	normalForms := map[string]string{
+		"VFR800": "VFR800", "HONDA VFR800": "VFR800", "ВЫФЕР": "VFR800",
+		"R6": "R6", "YZF-R6": "R6", "YZFR6": "R6", "YAMAHA R6": "R6", "СТРЕКОЗА": "R6",
 	}
-	return normal_forms[strings.ToUpper(query)]
+
+	query_ := strings.ToUpper(query)
+
+	return normalForms[query_]
 }
 
 func queryToAutoRuQuery(query string) string {
 	model := queryToModel(query)
 
-	model_ids := map[string]string{
+	modelIds := map[string]string{
 		"VFR800": "7889",
-		"R6": "9605",
+		"R6":     "9605",
 	}
 
-	model_param := "m[]=" + model_ids[model]
+	modelParam := "m[]=" + modelIds[model]
 
-	model_paths := map[string]string{
+	modelPaths := map[string]string{
 		"VFR800": "used/honda/vfr/",
 		"R6":     "used/yamaha/yzf-r6/",
 	}
 
-	return AutoRuVendorsUrl + model_paths[model] + "?" + model_param
+	return AutoRuVendorsUrl + modelPaths[model] + "?" + modelParam
 }
 
 func fetchAutoRuOffers(html string, out chan interface{}) error {
@@ -65,9 +68,9 @@ func getAutoRuOffers(query string) <-chan interface{} {
 		// TODO: check defer order
 		defer close(links)
 
-		auto_ru_query := queryToAutoRuQuery(query)
+		autoRuQuery := queryToAutoRuQuery(query)
 
-		resp, err := http.Get(auto_ru_query)
+		resp, err := http.Get(autoRuQuery)
 		if err != nil {
 			links <- err
 			return
@@ -75,7 +78,7 @@ func getAutoRuOffers(query string) <-chan interface{} {
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			links <- errors.New(fmt.Sprintf("request: %s, status: %d", auto_ru_query, resp.StatusCode))
+			links <- errors.New(fmt.Sprintf("request: %s, status: %d", autoRuQuery, resp.StatusCode))
 			return
 		}
 
