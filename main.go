@@ -21,13 +21,7 @@ const AllMatches = -1
 const AutoRuVendorsUrl = "http://moto.auto.ru/motorcycle/"
 
 func queryToModel(query string) string {
-	normalForms := map[string]string{
-		"VFR800": "VFR800", "HONDA VFR800": "VFR800", "ВЫФЕР": "VFR800",
-		"R6": "R6", "YZF-R6": "R6", "YZFR6": "R6", "YAMAHA R6": "R6", "СТРЕКОЗА": "R6",
-	}
-
 	query_ := strings.ToUpper(query)
-
 	return normalForms[query_]
 }
 
@@ -200,7 +194,7 @@ func getBikeOffers(st *state) http.HandlerFunc {
 	}
 }
 
-func startBBSrv() {
+func startBikeSearcher() {
 	st := new(state)
 
 	r := mux.NewRouter()
@@ -213,7 +207,7 @@ func startBBSrv() {
 }
 
 func main() {
-	startBBSrv()
+	startBikeSearcher()
 }
 
 func init() {
