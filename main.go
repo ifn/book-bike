@@ -26,25 +26,25 @@ func queryToModel(query string) string {
 }
 
 func queryToAutoRuQuery(query string) string {
-	model := queryToModel(query)
-
 	modelIds := map[string]string{
 		"VFR800": "7889",
 		"R6":     "9605",
 	}
-
-	modelParam := "m[]=" + modelIds[model]
 
 	modelPaths := map[string]string{
 		"VFR800": "used/honda/vfr/",
 		"R6":     "used/yamaha/yzf-r6/",
 	}
 
+	model := queryToModel(query)
+
+	modelParam := "m[]=" + modelIds[model]
+
 	return AutoRuVendorsUrl + modelPaths[model] + "?" + modelParam
 }
 
 func fetchAutoRuOffers(html string, out chan interface{}) error {
-	// TODO: check re
+	// '\n' is not matched by default, so it should work well without 'ungreedy' flag
 	var offersRE = regexp.MustCompile(`(?U)href="(.+)".+class="offer-list"`)
 
 	matchedOffers := offersRE.FindAllStringSubmatch(html, AllMatches)
@@ -59,7 +59,6 @@ func getAutoRuOffers(query string) <-chan interface{} {
 	links := make(chan interface{})
 
 	go func() {
-		// TODO: check defer order
 		defer close(links)
 
 		autoRuQuery := queryToAutoRuQuery(query)
@@ -151,9 +150,9 @@ type BikeOffersResponse struct {
 //
 
 func (self *BikeOffersResponse) SetOffers() error {
-	model := self.Model
+	query := self.Model
 
-	offers, err := self.getOffers(model)
+	offers, err := self.getOffers(query)
 	if err != nil {
 		return err
 	}
