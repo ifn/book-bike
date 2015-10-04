@@ -20,12 +20,18 @@ const AllMatches = -1
 
 const AutoRuVendorsUrl = "http://moto.auto.ru/motorcycle/"
 
-func queryToModel(query string) string {
+var undefModel = errors.New("Undefined model")
+
+func queryToModel(query string) (string, error) {
 	query_ := strings.ToUpper(query)
-	return normalForms[query_]
+
+	if model, ok := normalForms[query_]; ok {
+		return model, nil
+	}
+	return "", undefModel
 }
 
-func queryToAutoRuQuery(query string) string {
+func modelToAutoRuQuery(model string) string {
 	modelIds := map[string]string{
 		"VFR800": "7889",
 		"R6":     "9605",
@@ -35,8 +41,6 @@ func queryToAutoRuQuery(query string) string {
 		"VFR800": "used/honda/vfr/",
 		"R6":     "used/yamaha/yzf-r6/",
 	}
-
-	model := queryToModel(query)
 
 	modelParam := "m[]=" + modelIds[model]
 
@@ -55,13 +59,13 @@ func fetchAutoRuOffers(html string, out chan interface{}) error {
 	return nil
 }
 
-func getAutoRuOffers(query string) <-chan interface{} {
+func getAutoRuOffers(model string) <-chan interface{} {
 	links := make(chan interface{})
 
 	go func() {
 		defer close(links)
 
-		autoRuQuery := queryToAutoRuQuery(query)
+		autoRuQuery := modelToAutoRuQuery(model)
 
 		resp, err := http.Get(autoRuQuery)
 		if err != nil {
@@ -152,7 +156,12 @@ type BikeOffersResponse struct {
 func (self *BikeOffersResponse) SetOffers() error {
 	query := self.Model
 
-	offers, err := self.getOffers(query)
+	model, err := queryToModel(query)
+	if err != nil {
+		return err
+	}
+
+	offers, err := self.getOffers(model)
 	if err != nil {
 		return err
 	}
