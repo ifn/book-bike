@@ -177,7 +177,7 @@ func getBikeOffers(st *state) http.HandlerFunc {
 		decoder := json.NewDecoder(r.Body)
 		encoder := json.NewEncoder(w)
 
-		handle_error := func(err error) {
+		handleError := func(err error) {
 			log.Println(err)
 			encoder.Encode(Error{err.Error()})
 		}
@@ -186,19 +186,19 @@ func getBikeOffers(st *state) http.HandlerFunc {
 
 		err := decoder.Decode(resp)
 		if err != nil {
-			handle_error(err)
+			handleError(err)
 			return
 		}
 
 		err = resp.SetOffers()
 		if err != nil {
-			handle_error(err)
+			handleError(err)
 			return
 		}
 
 		err = encoder.Encode(resp)
 		if err != nil {
-			handle_error(err)
+			handleError(err)
 			return
 		}
 	}
