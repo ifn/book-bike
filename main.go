@@ -20,6 +20,13 @@ const AllMatches = -1
 
 const AutoRuVendorsUrl = "http://moto.auto.ru/motorcycle/"
 
+type site int
+
+const (
+	AutoRu site = iota
+	Avito
+)
+
 var undefModel = errors.New("Undefined model")
 
 func queryToModel(query string) (string, error) {
@@ -47,6 +54,10 @@ func modelToAutoRuQuery(model string) string {
 	return AutoRuVendorsUrl + modelPaths[model] + "?" + modelParam
 }
 
+var modelToQuery map[site](func(string) string) = map[site](func(string) string){
+	AutoRu: modelToAutoRuQuery,
+}
+
 func fetchAutoRuOffers(html string, out chan interface{}) error {
 	// '\n' is not matched by default, so it should work well without 'ungreedy' flag
 	var offersRE = regexp.MustCompile(`(?U)href="(.+)".+class="offer-list"`)
@@ -59,35 +70,45 @@ func fetchAutoRuOffers(html string, out chan interface{}) error {
 	return nil
 }
 
-func getAutoRuOffers(model string) <-chan interface{} {
+var fetchOffers map[site](func(string, chan interface{}) error) = map[site](func(string, chan interface{}) error){
+	AutoRu: fetchAutoRuOffers,
+}
+
+func getOffers(site_ site, model string) <-chan interface{} {
 	links := make(chan interface{})
 
 	go func() {
-		defer close(links)
+		var err error
 
-		autoRuQuery := modelToAutoRuQuery(model)
+		defer func() {
+			if err != nil {
+				links <- err
+			}
 
-		resp, err := http.Get(autoRuQuery)
+			close(links)
+		}()
+
+		siteQuery := modelToQuery[site_](model)
+
+		// TODO: missing timeouts
+		resp, err := http.Get(siteQuery)
 		if err != nil {
-			links <- err
 			return
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			links <- errors.New(fmt.Sprintf("request: %s, status: %d", autoRuQuery, resp.StatusCode))
+			err = errors.New(fmt.Sprintf("request: %s, status: %d", siteQuery, resp.StatusCode))
 			return
 		}
 
 		respBody, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			links <- err
 			return
 		}
 
-		err = fetchAutoRuOffers(string(respBody), links)
+		err = fetchOffers[site_](string(respBody), links)
 		if err != nil {
-			links <- err
 			return
 		}
 	}()
@@ -95,13 +116,12 @@ func getAutoRuOffers(model string) <-chan interface{} {
 	return links
 }
 
-func getAvitoOffers(query string) <-chan interface{} {
-	links := make(chan interface{})
-	go func() {
-		links <- "https://www.avito.ru/moskva/mototsikly_i_mototehnika/honda_cbr_1000_rr_fireblade_632522473"
-		close(links)
-	}()
-	return links
+func getAutoRuOffers(model string) <-chan interface{} {
+	return getOffers(AutoRu, model)
+}
+
+func getAvitoOffers(model string) <-chan interface{} {
+	return getOffers(Avito, model)
 }
 
 func (self *BikeOffersResponse) getOffers(query string) (offers []string, err error) {
