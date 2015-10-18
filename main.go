@@ -6,19 +6,21 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 
-	"github.com/codegangsta/negroni"
 	"github.com/gorilla/mux"
 )
 
 const AllMatches = -1
 
 const AutoRuVendorsUrl = "http://moto.auto.ru/motorcycle/"
+const AvitoMoscowUrl = "https://www.avito.ru/moskva/mototsikly_i_mototehnika/"
 
 type site int
 
@@ -54,8 +56,13 @@ func modelToAutoRuQuery(model string) string {
 	return AutoRuVendorsUrl + modelPaths[model] + "?" + modelParam
 }
 
+func modelToAvitoQuery(model string) string {
+	return AvitoMoscowUrl
+}
+
 var modelToQuery map[site](func(string) string) = map[site](func(string) string){
 	AutoRu: modelToAutoRuQuery,
+	Avito:  modelToAvitoQuery,
 }
 
 func fetchAutoRuOffers(html string, out chan interface{}) error {
@@ -70,8 +77,24 @@ func fetchAutoRuOffers(html string, out chan interface{}) error {
 	return nil
 }
 
+func fetchAvitoOffers(html string, out chan interface{}) error {
+	return nil
+}
+
 var fetchOffers map[site](func(string, chan interface{}) error) = map[site](func(string, chan interface{}) error){
 	AutoRu: fetchAutoRuOffers,
+	Avito:  fetchAvitoOffers,
+}
+
+func NewClient() *http.Transport {
+	timeout := time.Duration(time.Second * 5)
+	dialTimeout := func(network, addr string) (net.Conn, error) {
+		return net.DialTimeout(network, addr, timeout)
+	}
+
+	return &http.Transport{
+		Dial: dialTimeout,
+	}
 }
 
 func getOffers(site_ site, model string) <-chan interface{} {
@@ -90,8 +113,18 @@ func getOffers(site_ site, model string) <-chan interface{} {
 
 		siteQuery := modelToQuery[site_](model)
 
+		req, err := http.NewRequest("GET", siteQuery, nil)
+		if err != nil {
+			return
+		}
+
+		ua := "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.10; rv:40.0) Gecko/20100101 Firefox/40.0"
+		req.Header.Set("User-Agent", ua)
+
+		t := NewClient()
+
 		// TODO: missing timeouts
-		resp, err := http.Get(siteQuery)
+		resp, err := t.RoundTrip(req)
 		if err != nil {
 			return
 		}
@@ -124,26 +157,37 @@ func getAvitoOffers(model string) <-chan interface{} {
 	return getOffers(Avito, model)
 }
 
-func (self *BikeOffersResponse) getOffers(query string) (offers []string, err error) {
-	auto := getAutoRuOffers(query)
-	var avito chan interface{}
+func (self *BikeOffersResponse) getOffers(model string) (offers []string, err error) {
 
-Loop:
+	processMessage := func(ch <-chan interface{}, msg interface{}) <-chan interface{} {
+		switch msg := msg.(type) {
+		case error:
+			err = msg
+			return nil
+		case string:
+			offers = append(offers, msg)
+			return ch
+		}
+		return ch
+	}
+
+	auto := getAutoRuOffers(model)
+	avito := getAvitoOffers(model)
+
 	for auto != nil || avito != nil {
 		select {
 		case msg, ok := <-auto:
 			if !ok {
 				auto = nil
-				continue Loop
+				continue
 			}
-			switch msg := msg.(type) {
-			case error:
-				err = msg
-				auto = nil
-				continue Loop
-			case string:
-				offers = append(offers, msg)
+			auto = processMessage(auto, msg)
+		case msg, ok := <-avito:
+			if !ok {
+				avito = nil
+				continue
 			}
+			avito = processMessage(avito, msg)
 		}
 	}
 
@@ -167,27 +211,30 @@ type BikeOffersRequest struct {
 type BikeOffersResponse struct {
 	st *state
 
+	Error
+
 	*BikeOffersRequest
 	Offers []string `json:"offers"`
 }
 
 //
 
-func (self *BikeOffersResponse) SetOffers() error {
+func (self *BikeOffersResponse) SetOffers() (err error) {
 	query := self.Model
+
+	var offers []string
+
+	defer func() {
+		self.Offers = offers
+	}()
 
 	model, err := queryToModel(query)
 	if err != nil {
-		return err
+		return
 	}
 
-	offers, err := self.getOffers(model)
-	if err != nil {
-		return err
-	}
-
-	self.Offers = offers
-	return nil
+	offers, err = self.getOffers(model)
+	return
 }
 
 func getBikeOffers(st *state) http.HandlerFunc {
@@ -197,30 +244,28 @@ func getBikeOffers(st *state) http.HandlerFunc {
 		decoder := json.NewDecoder(r.Body)
 		encoder := json.NewEncoder(w)
 
-		handleError := func(err error) {
-			log.Println(err)
-			encoder.Encode(Error{err.Error()})
-		}
-
 		resp := &BikeOffersResponse{st: st}
 
-		err := decoder.Decode(resp)
+		var err error
+
+		defer func() {
+			if err != nil {
+				log.Println(err)
+				resp.Err = err.Error()
+			}
+
+			err := encoder.Encode(resp)
+			if err != nil {
+				log.Println(err)
+			}
+		}()
+
+		err = decoder.Decode(resp)
 		if err != nil {
-			handleError(err)
 			return
 		}
 
 		err = resp.SetOffers()
-		if err != nil {
-			handleError(err)
-			return
-		}
-
-		err = encoder.Encode(resp)
-		if err != nil {
-			handleError(err)
-			return
-		}
 	}
 }
 
@@ -231,9 +276,7 @@ func startBikeSearcher() {
 	r.HandleFunc("/getBikeOffers", getBikeOffers(st)).Methods("POST")
 	http.Handle("/", r)
 
-	n := negroni.Classic()
-	n.UseHandler(r)
-	n.Run(":" + os.Getenv("PORT"))
+	log.Fatal(http.ListenAndServe(":"+os.Getenv("PORT"), nil))
 }
 
 func main() {
