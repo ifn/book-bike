@@ -86,15 +86,23 @@ var fetchOffers map[site](func(string, chan interface{}) error) = map[site](func
 	Avito:  fetchAvitoOffers,
 }
 
-func NewClient() *http.Transport {
+func getUrl(url string) (resp *http.Response, err error) {
 	timeout := time.Duration(time.Second * 5)
 	dialTimeout := func(network, addr string) (net.Conn, error) {
 		return net.DialTimeout(network, addr, timeout)
 	}
+	t := &http.Transport{Dial: dialTimeout}
 
-	return &http.Transport{
-		Dial: dialTimeout,
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return
 	}
+
+	ua := "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.10; rv:40.0) Gecko/20100101 Firefox/40.0"
+	req.Header.Set("User-Agent", ua)
+
+	// TODO: missing timeouts
+	return t.RoundTrip(req)
 }
 
 func getOffers(site_ site, model string) <-chan interface{} {
@@ -113,18 +121,7 @@ func getOffers(site_ site, model string) <-chan interface{} {
 
 		siteQuery := modelToQuery[site_](model)
 
-		req, err := http.NewRequest("GET", siteQuery, nil)
-		if err != nil {
-			return
-		}
-
-		ua := "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.10; rv:40.0) Gecko/20100101 Firefox/40.0"
-		req.Header.Set("User-Agent", ua)
-
-		t := NewClient()
-
-		// TODO: missing timeouts
-		resp, err := t.RoundTrip(req)
+		resp, err := getUrl(siteQuery)
 		if err != nil {
 			return
 		}
@@ -158,7 +155,6 @@ func getAvitoOffers(model string) <-chan interface{} {
 }
 
 func (self *BikeOffersResponse) getOffers(model string) (offers []string, err error) {
-
 	processMessage := func(ch <-chan interface{}, msg interface{}) <-chan interface{} {
 		switch msg := msg.(type) {
 		case error:
@@ -166,7 +162,6 @@ func (self *BikeOffersResponse) getOffers(model string) (offers []string, err er
 			return nil
 		case string:
 			offers = append(offers, msg)
-			return ch
 		}
 		return ch
 	}
