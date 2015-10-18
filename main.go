@@ -195,10 +195,6 @@ type state struct{}
 
 //
 
-type Error struct {
-	Err string `json:"error"`
-}
-
 type BikeOffersRequest struct {
 	Model string `json:"model"`
 }
@@ -206,10 +202,9 @@ type BikeOffersRequest struct {
 type BikeOffersResponse struct {
 	st *state
 
-	Error
-
-	*BikeOffersRequest
+	BikeOffersRequest
 	Offers []string `json:"offers"`
+	Err    string   `json:"error"`
 }
 
 //
